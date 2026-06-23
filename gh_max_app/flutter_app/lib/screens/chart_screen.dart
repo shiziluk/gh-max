@@ -1,4 +1,4 @@
-// 图表页面 - 独立页面，包含K线图和技术指标图表
+﻿// 图表页面 - 独立页面，包含K线图和技术指标图表
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -65,7 +65,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   int _getDaysFromPeriod(String period) {
     switch (period) {
       case '1D':
-        return 1;
+        return 3;
       case '1W':
         return 7;
       case '1M':
@@ -379,6 +379,11 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     final range = maxPrice - minPrice;
+    if (range == 0 || spots.length < 2) {
+      return LineChartData(lineBarsData: [
+        LineChartBarData(spots: spots, isCurved: true, barWidth: 2, color: AppTheme.primaryColor)
+      ]);
+    }
     minPrice -= range * 0.1;
     maxPrice += range * 0.1;
 
