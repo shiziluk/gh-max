@@ -285,7 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             labelText: 'AI模型选择',
                             border: OutlineInputBorder(),
                             helperText: '选择通义千问模型版本',
-                            prefixIcon: Icon(Icons.cpu, color: Colors.orange),
+                            prefixIcon: Icon(Icons.memory, color: Colors.orange),
                           ),
                           items: _aiModels.map((model) {
                             return DropdownMenuItem<String>(
