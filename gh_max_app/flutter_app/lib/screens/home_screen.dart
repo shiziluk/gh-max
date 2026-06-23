@@ -1,4 +1,4 @@
-// 首页 - 主仪表盘
+﻿// 首页 - 主仪表盘
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return PreferredSize(
       preferredSize: const Size.fromHeight(48),
       child: Container(
-        color: isDark ? AppTheme.darkBg : Colors.white,
+        color: Theme.of(context).cardColor,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
@@ -177,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 });
               },
               selectedColor: Colors.white,  // 选中时文字为白色，与青蓝背景对比
-              color: AppTheme.textSecondary,  // 未选中时文字为灰色
+              color: Theme.of(context).brightness == Brightness.dark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,  // 未选中时文字为灰色
               fillColor: AppTheme.primaryColor,  // 选中时背景为青蓝色
               borderColor: AppTheme.primaryColor.withOpacity(0.5),
               borderWidth: 1,
