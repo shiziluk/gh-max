@@ -379,7 +379,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     final range = maxPrice - minPrice;
-    // ????????????Y????????
+    // Single data point: use fixed padding; multiple points: use 10% range padding
     if (spots.length < 2) {
       minPrice = minPrice - 10;
       maxPrice = maxPrice + 10;
