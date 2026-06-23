@@ -13,6 +13,44 @@ class ApiService {
   
   // 超时时间（毫秒）
   static const timeout = 30000;
+  
+  // 重试次数
+  static const maxRetries = 3;
+  static const retryDelay = Duration(seconds: 2);
+  
+  // 带重试的GET请求
+  static Future<http.Response?> _getWithRetry(String url) async {
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        final response = await http.get(
+          Uri.parse(url),
+        ).timeout(Duration(milliseconds: timeout));
+        if (response != null && response.statusCode == 200) return response;
+      } catch (e) {
+        if (i == maxRetries - 1) return null;
+        await Future.delayed(retryDelay);
+      }
+    }
+    return null;
+  }
+  
+  // 带重试的POST请求
+  static Future<http.Response?> _postWithRetry(String url, {Map<String, String>? headers, Object? body}) async {
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        final response = await http.post(
+          Uri.parse(url),
+          headers: headers ?? {'Content-Type': 'application/json'},
+          body: body,
+        ).timeout(Duration(milliseconds: timeout));
+        return response;
+      } catch (e) {
+        if (i == maxRetries - 1) return null;
+        await Future.delayed(retryDelay);
+      }
+    }
+    return null;
+  }
 
   // ==================== 市场数据 ====================
 
@@ -22,7 +60,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/market'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return MarketData.fromJson(json.decode(response.body));
       }
     } catch (e) {
@@ -39,7 +77,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/technical'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return TechnicalIndicators.fromJson(json.decode(response.body));
       }
     } catch (e) {
@@ -56,7 +94,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/score'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return ScoreResult.fromJson(json.decode(response.body));
       }
     } catch (e) {
@@ -73,7 +111,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/news'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return NewsSentiment.fromJson(json.decode(response.body));
       }
     } catch (e) {
@@ -90,7 +128,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/full'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -107,7 +145,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/jinshi'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -124,7 +162,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/refresh'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      return response.statusCode == 200;
+      return response != null && response.statusCode == 200;
     } catch (e) {
       print('刷新数据失败: $e');
       return false;
@@ -139,11 +177,9 @@ class ApiService {
       if (source != null && source.isNotEmpty) {
         url += '&source=$source';
       }
-      final response = await http.get(
-        Uri.parse(url),
-      ).timeout(const Duration(milliseconds: timeout));
+      final response = await _getWithRetry(url);
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -158,7 +194,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/history?days=$days&type=score'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -175,7 +211,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/settings'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -199,7 +235,7 @@ class ApiService {
         body: json.encode(body),
       ).timeout(const Duration(milliseconds: timeout));
 
-      return response.statusCode == 200;
+      return response != null && response.statusCode == 200;
     } catch (e) {
       print('更新设置失败: $e');
       return false;
@@ -214,7 +250,7 @@ class ApiService {
         Uri.parse('$baseUrl/'),
       ).timeout(const Duration(milliseconds: 5000));
 
-      return response.statusCode == 200;
+      return response != null && response.statusCode == 200;
     } catch (e) {
       return false;
     }
@@ -228,7 +264,7 @@ class ApiService {
         Uri.parse('$baseUrl/api/ai/config'),
       ).timeout(const Duration(milliseconds: timeout));
 
-      if (response.statusCode == 200) {
+      if (response != null && response.statusCode == 200) {
         return json.decode(response.body);
       }
     } catch (e) {
@@ -253,7 +289,7 @@ class ApiService {
         }),
       ).timeout(const Duration(milliseconds: timeout));
 
-      return response.statusCode == 200;
+      return response != null && response.statusCode == 200;
     } catch (e) {
       print('保存AI配置失败: $e');
       return false;

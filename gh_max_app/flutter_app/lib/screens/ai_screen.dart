@@ -1,10 +1,12 @@
-// AI助手页面 - 提供智能分析和问答功能
+﻿// AI助手页面 - 提供智能分析和问答功能
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../utils/theme.dart';
 import '../utils/navigation_manager.dart';
+import 'dart:io';
+import 'dart:async';
 
 class AIScreen extends StatefulWidget {
   const AIScreen({super.key});
@@ -20,12 +22,26 @@ class _AIScreenState extends State<AIScreen> {
   bool _aiEnabled = false;
   String _aiStatus = '检测中...';
   String? _currentAnalysis;
+  String get _historyFilePath {
+    final exeDir = Platform.resolvedExecutable;
+    final dir = File(exeDir).parent.path;
+    return dir + '\\' + 'chat_history.json';
+  }
+
 
   @override
   void initState() {
     super.initState();
     _checkAIStatus();
     _loadAnalysis();
+    _loadHistory();
+    // Auto-refresh AI status every 5 seconds
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 3));
+      if (!mounted) return false;
+      _checkAIStatus();
+      return true;
+    });
   }
 
   Future<void> _checkAIStatus() async {
@@ -73,9 +89,41 @@ class _AIScreenState extends State<AIScreen> {
     }
   }
 
+  Future<void> _loadHistory() async {
+    try {
+      final file = File(_historyFilePath);
+      if (await file.exists()) {
+        final jsonStr = await file.readAsString();
+        final List<dynamic> jsonList = json.decode(jsonStr);
+        setState(() {
+          _messages.clear();
+          _messages.addAll(jsonList.map((e) => ChatMessage.fromJson(e)));
+        });
+      }
+    } catch (e) {
+      // Silent fail on load
+    }
+  }
+
+  Future<void> _saveHistory() async {
+    try {
+      final file = File(_historyFilePath);
+      final jsonList = _messages.map((m) => m.toJson()).toList();
+      await file.writeAsString(json.encode(jsonList));
+    } catch (e) {
+      // Silent fail on save
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty || !_aiEnabled) return;
+    if (text.isEmpty) return;
+    
+    // Force status check before sending if not confirmed enabled
+    if (!_aiEnabled) {
+      await _checkAIStatus();
+    }
+    if (!_aiEnabled) return;
 
     _messageController.clear();
     
@@ -126,6 +174,7 @@ class _AIScreenState extends State<AIScreen> {
       });
     } finally {
       setState(() => _isLoading = false);
+      _saveHistory();
     }
   }
 
@@ -137,9 +186,15 @@ class _AIScreenState extends State<AIScreen> {
       appBar: AppBar(
         title: const Text('AI助手'),
         actions: [
+          if (_messages.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _clearHistory,
+              tooltip: '清除聊天记录',
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _aiEnabled ? _loadAnalysis : null,
+            onPressed: () { _checkAIStatus().then((_) => _loadAnalysis()); },
             tooltip: '刷新分析',
           ),
         ],
@@ -255,6 +310,28 @@ class _AIScreenState extends State<AIScreen> {
                             fontSize: 13,
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppTheme.primaryColor.withOpacity(0.08) : AppTheme.primaryColor.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.touch_app, size: 16, color: isDark ? AppTheme.textTertiary : Colors.grey.shade500),
+                              const SizedBox(width: 6),
+                              Text(
+                                '长按对话消息可删除单条记录',
+                                style: TextStyle(
+                                  color: isDark ? AppTheme.textTertiary : Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -265,7 +342,7 @@ class _AIScreenState extends State<AIScreen> {
                       if (index == _messages.length && _isLoading) {
                         return _buildTypingIndicator();
                       }
-                      return _buildMessageBubble(_messages[index]);
+                      return _buildMessageBubble(_messages[index], index);
                     },
                   ),
           ),
@@ -287,7 +364,7 @@ class _AIScreenState extends State<AIScreen> {
                   child: TextField(
                     controller: _messageController,
                     decoration: InputDecoration(
-                      hintText: _aiEnabled ? '输入您的问题...' : '请先配置AI服务',
+                      hintText: _aiStatus.contains('检测') ? '正在检测AI服务...' : (_aiEnabled ? '输入您的问题...' : '请先在设置中配置AI服务'),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(24),
                         borderSide: BorderSide(
@@ -307,13 +384,13 @@ class _AIScreenState extends State<AIScreen> {
                         vertical: 12,
                       ),
                     ),
-                    enabled: _aiEnabled && !_isLoading,
+                    enabled: !_isLoading && (_aiEnabled || _aiStatus == '检测中...'),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: _aiEnabled && !_isLoading ? _sendMessage : null,
+                  onPressed: !_isLoading && (_aiEnabled || _aiStatus == '检测中...') ? _sendMessage : null,
                   icon: Icon(
                     Icons.send,
                     color: _aiEnabled && !_isLoading 
@@ -332,12 +409,14 @@ class _AIScreenState extends State<AIScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message) {
+  Widget _buildMessageBubble(ChatMessage message, int index) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
+    return GestureDetector(
+      onLongPress: () => _deleteMessage(index),
+      child: Align(
+        alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.all(12),
         constraints: BoxConstraints(
@@ -374,7 +453,7 @@ class _AIScreenState extends State<AIScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildTypingIndicator() {
@@ -414,6 +493,40 @@ class _AIScreenState extends State<AIScreen> {
     );
   }
 
+  void _clearHistory() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认清除'),
+        content: const Text('确定要清除所有聊天记录吗？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () { setState(() => _messages.clear()); _saveHistory(); Navigator.pop(ctx); },
+            child: const Text('确定', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessage(int index) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除消息'),
+        content: const Text('确定要删除这条消息吗？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () { setState(() => _messages.removeAt(index)); _saveHistory(); Navigator.pop(ctx); },
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _messageController.dispose();
@@ -431,4 +544,16 @@ class ChatMessage {
     required this.isUser,
     required this.timestamp,
   });
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'isUser': isUser,
+    'timestamp': timestamp.toIso8601String(),
+  };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+    text: json['text'] ?? '',
+    isUser: json['isUser'] ?? false,
+    timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
+  );
 }

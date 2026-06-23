@@ -22,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
   final TextEditingController _aiApiKeyController = TextEditingController();
   bool _aiEnabled = false;
+  bool _hasApiKey = false;
   String _aiModel = 'qwen-plus';
 
   final ThemeManager _themeManager = ThemeManager.instance;
@@ -80,6 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _aiEnabled = response['enabled'] ?? false;
           _aiModel = response['model'] ?? 'qwen-plus';
+          _hasApiKey = response['has_api_key'] ?? false;
           // API Key不从后端返回（安全考虑），只显示是否已配置
         });
       }
@@ -279,25 +281,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: DropdownButtonFormField<String>(
-                          value: _aiModels.contains(_aiModel) ? _aiModel : _aiModels[1],
+                        child: TextField(
+                          controller: TextEditingController(text: _aiModel),
                           decoration: const InputDecoration(
-                            labelText: 'AI模型选择',
+                            labelText: 'AI模型型号',
                             border: OutlineInputBorder(),
-                            helperText: '选择通义千问模型版本',
+                            hintText: '例如: qwen-plus, qwen-max',
+                            helperText: '输入通义千问模型名称，推荐 qwen-plus',
                             prefixIcon: Icon(Icons.memory, color: Colors.orange),
                           ),
-                          items: _aiModels.map((model) {
-                            return DropdownMenuItem<String>(
-                              value: model,
-                              child: Text(model),
-                            );
-                          }).toList(),
                           onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _aiModel = value);
-                              _saveSettings();
-                            }
+                            _aiModel = value.trim();
+                          },
+                          onSubmitted: (value) {
+                            _aiModel = value.trim();
+                            _saveSettings();
                           },
                         ),
                       ),

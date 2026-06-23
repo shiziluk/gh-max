@@ -4,6 +4,7 @@ AI服务模块
 """
 
 import os
+import sys
 import json
 import requests
 from typing import Optional, Dict, Any
@@ -14,7 +15,7 @@ class AIService:
     """AI服务类 - 处理千问API调用"""
     
     # 千问API配置
-    QWEN_API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     
     def __init__(self):
         self.api_key = None
@@ -24,7 +25,7 @@ class AIService:
     
     def _load_config(self):
         """加载配置"""
-        config_file = os.path.join(os.path.dirname(__file__), "ai_config.json")
+        config_file = os.path.join(os.path.dirname(sys.executable), "ai_config.json")
         if os.path.exists(config_file):
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
@@ -37,17 +38,28 @@ class AIService:
                 logging_service.error(f"AI配置加载失败: {e}", "ai")
     
     def save_config(self, api_key: str, enabled: bool, model: str = "qwen-plus"):
-        """保存配置"""
-        config_file = os.path.join(os.path.dirname(__file__), "ai_config.json")
+        """保存配置 - 空密钥不覆盖已有密钥"""
+        config_file = os.path.join(os.path.dirname(sys.executable), "ai_config.json")
+        
+        # 如果传入空密钥，保留已保存的密钥
+        new_key = api_key.strip()
+        if not new_key and os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    old_config = json.load(f)
+                    new_key = old_config.get('api_key', '')
+            except:
+                pass
+        
         config = {
-            'api_key': api_key,
+            'api_key': new_key,
             'enabled': enabled,
             'model': model
         }
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-            self.api_key = api_key
+            self.api_key = new_key
             self.enabled = enabled
             self.model = model
             logging_service.info(f"AI配置已保存", "ai")
@@ -67,7 +79,7 @@ class AIService:
             return None
         
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": "Bearer " + (self.api_key.strip() if self.api_key else ""),
             "Content-Type": "application/json"
         }
         
@@ -78,12 +90,7 @@ class AIService:
         
         payload = {
             "model": self.model,
-            "input": {
-                "messages": messages
-            },
-            "parameters": {
-                "result_format": "message"
-            }
+            "messages": messages
         }
         
         try:
@@ -97,8 +104,7 @@ class AIService:
             
             if response.status_code == 200:
                 result = response.json()
-                output = result.get('output', {})
-                choices = output.get('choices', [])
+                choices = result.get('choices', [])
                 if choices:
                     message = choices[0].get('message', {})
                     content = message.get('content', '')
@@ -187,23 +193,66 @@ class AIService:
                 "error": "AI服务未启用或API Key未配置"
             }
         
-        system_prompt = """你是一位专业的黄金市场分析师助手，可以帮助用户解答关于黄金市场、技术分析、宏观经济等方面的问题。
-请用中文回答，保持专业、简洁、友好的风格。
-如果用户询问具体操作建议，请提醒用户这只是参考建议，实际操作需要结合自身情况判断。"""
+        system_prompt = """你是一位专业的黄金市场分析师助手。以下是实时市场数据，你必须使用这些具体数字回答用户问题，不得编造价格。
+
+重要规则：
+1. 回复开头必须引用当前实时数据中的国际金价和国内金价的具体数字
+2. 如果数据中标注为"N/A"，请如实告知用户该数据暂不可用
+3. 禁止使用你训练数据中的历史价格，必须使用提供的实时数据
+4. 请用简体中文回答，禁止使用繁体字"""
         
-        # 如果有上下文数据，添加到提示词中
+        # 构建丰富的上下文
         if context:
-            score = context.get('score', {})
-            market = context.get('market', {})
-            gold = market.get('gold', {})
+            market = context.get("market", {})
+            gold = market.get("gold", {})
+            shanghai_gold = context.get("shanghai_gold", {})
+            dxy = market.get("dxy", {})
+            score = context.get("score", {})
+            technical = context.get("technical", {})
             
-            context_info = f"""
-【当前市场背景】
-- 黄金价格: {gold.get('price', 'N/A')} 美元/盎司
-- GH评分: {score.get('total_score', 50)}/100
-- 趋势: {score.get('trend', 'neutral')}
-"""
-            prompt = context_info + "\n【用户问题】\n" + user_question
+            intl_price = gold.get("price", "N/A")
+            intl_change = gold.get("change", "N/A")
+            intl_change_pct = gold.get("change_pct", "N/A")
+            
+            domestic_price = shanghai_gold.get("price", "N/A") if shanghai_gold else "N/A"
+            domestic_change = shanghai_gold.get("change", "N/A") if shanghai_gold else "N/A"
+            
+            dxy_price = dxy.get("price", "N/A")
+            
+            total_score = score.get("total_score", 50)
+            trend = score.get("trend", "neutral")
+            
+            # 趋势中文映射
+            trend_map = {
+                "strong_bullish": "强烈看多",
+                "bullish": "偏多",
+                "neutral": "震荡",
+                "bearish": "偏空",
+                "strong_bearish": "强烈看空"
+            }
+            trend_cn = trend_map.get(trend, "震荡")
+            
+            # 技术指标摘要
+            tech_summary = ""
+            if technical:
+                current_tech = technical.get("current", {})
+                rsi = current_tech.get("rsi", "N/A")
+                macd_signal = current_tech.get("macd_signal", "N/A")
+                tech_summary = "- RSI(14): " + str(rsi) + "\n- MACD信号: " + str(macd_signal) + "\n"
+            
+            context_info = "【以下是当前实时市场数据，请严格按照这些数字回答】\n\n"
+            context_info += "国际黄金（伦敦金/XAUUSD）:\n"
+            context_info += "- 价格: " + str(intl_price) + " 美元/盎司\n"
+            context_info += "- 涨跌: " + str(intl_change) + " (" + str(intl_change_pct) + "%)\n\n"
+            context_info += "国内黄金（上海金交所AU9999）:\n"
+            context_info += "- 价格: " + str(domestic_price) + " 元/克\n"
+            context_info += "- 涨跌: " + str(domestic_change) + "\n\n"
+            context_info += "美元指数: " + str(dxy_price) + "\n\n"
+            context_info += "GH综合评分: " + str(total_score) + "/100\n"
+            context_info += "趋势判断: " + str(trend_cn) + "\n"
+            context_info += tech_summary + "\n"
+            
+            prompt = context_info + "（请务必使用以上实时数据中的数字来回答，不要编造价格）\n\n【用户问题】\n" + user_question
         else:
             prompt = user_question
         
@@ -220,7 +269,7 @@ class AIService:
                 "success": False,
                 "error": "AI回复失败，请稍后重试"
             }
-    
+
     def get_status(self) -> Dict:
         """获取AI服务状态"""
         return {

@@ -117,9 +117,7 @@ def refresh_data():
                     # 添加异常值过滤：国内黄金价格（AU9999）正常范围约900-980元/克
                     gold_price = jinshi_market.get("gold", {}).get("price", 0)
                     
-                    # #region debug-point H4:price-validation
                     import json, urllib.request, os; _p='d:\\workspace\\许阳这小子的诉求\\.dbg\\jinshi-price-display-error.env'; _u,_s='http://127.0.0.1:7777/event','jinshi-price-display-error'; exec("try:\n with open(_p) as f: c=f.read(); _u=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SERVER_URL=')),_u); _s=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SESSION_ID=')),_s)\nexcept: pass"); urllib.request.urlopen(urllib.request.Request(_u, data=json.dumps({"sessionId":_s,"runId":"pre","hypothesisId":"H4","location":"app.py:119","msg":"[DEBUG] 价格验证检查","data":{"gold_price":gold_price,"is_valid":gold_price<=0 or (gold_price>=900 and gold_price<=980)}}).encode(), headers={"Content-Type":"application/json"})).read()
-                    # #endregion
                     
                     if gold_price > 0 and (gold_price < 900 or gold_price > 980):
                         logging_service.warning(f"检测到异常价格 {gold_price}元/克，跳过保存", "refresh")
@@ -234,9 +232,7 @@ def get_market():
     """获取市场数据"""
     source = request.args.get('source', 'akshare')
     
-    # #region debug-point H2:api-response
     import json, urllib.request, os; _p='d:\\workspace\\许阳这小子的诉求\\.dbg\\jinshi-price-display-error.env'; _u,_s='http://127.0.0.1:7777/event','jinshi-price-display-error'; exec("try:\n with open(_p) as f: c=f.read(); _u=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SERVER_URL=')),_u); _s=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SESSION_ID=')),_s)\nexcept: pass"); urllib.request.urlopen(urllib.request.Request(_u, data=json.dumps({"sessionId":_s,"runId":"pre","hypothesisId":"H2","location":"app.py:224","msg":"[DEBUG] API请求来源: "+source,"data":{"source":source}}).encode(), headers={"Content-Type":"application/json"})).read()
-    # #endregion
     
     if source == 'jinshi':
         # 金十数据源 - 返回国内黄金价格（上海黄金交易所）
@@ -248,9 +244,7 @@ def get_market():
                 **shanghai_gold
             }
         
-        # #region debug-point H2:jinshi-response
         import json, urllib.request, os; _p='d:\\workspace\\许阳这小子的诉求\\.dbg\\jinshi-price-display-error.env'; _u,_s='http://127.0.0.1:7777/event','jinshi-price-display-error'; exec("try:\n with open(_p) as f: c=f.read(); _u=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SERVER_URL=')),_u); _s=next((l.split('=',1)[1] for l in c.split('\\n') if l.startswith('DEBUG_SESSION_ID=')),_s)\nexcept: pass"); urllib.request.urlopen(urllib.request.Request(_u, data=json.dumps({"sessionId":_s,"runId":"pre","hypothesisId":"H2","location":"app.py:237","msg":"[DEBUG] 金十API响应数据","data":{"gold_price":market_data.get("gold",{}).get("price",0),"gold_name":market_data.get("gold",{}).get("name","")}}).encode(), headers={"Content-Type":"application/json"})).read()
-        # #endregion
         
         return jsonify(market_data)
     
@@ -680,14 +674,28 @@ def ai_chat():
             "error": "AI服务未启用或API Key未配置，请在设置中配置千问API Key"
         })
     
-    # 提供当前市场数据作为上下文
+    if not current_state["current_data"]:
+        try: refresh_data()
+        except: pass
     context = None
     if current_state["current_data"]:
+        market_data = current_state["current_data"].get("market", {})
+        shanghai_gold = None
+        try: shanghai_gold = data_service.get_shanghai_gold_price()
+        except: pass
+        if not shanghai_gold or not shanghai_gold.get("price"):
+            try:
+                jr = get_jinshi_data_cached()
+                if jr:
+                    jg = jr.get("market", {}).get("gold", {})
+                    if jg.get("price"): shanghai_gold = jg
+            except: pass
         context = {
-            "market": current_state["current_data"].get("market", {}),
-            "score": current_state["current_data"].get("score", {})
+            "market": market_data,
+            "score": current_state["current_data"].get("score", {}),
+            "technical": current_state["current_data"].get("technical", {}),
+            "shanghai_gold": shanghai_gold or {}
         }
-    
     result = ai_service.chat(user_question, context)
     return jsonify(result)
 

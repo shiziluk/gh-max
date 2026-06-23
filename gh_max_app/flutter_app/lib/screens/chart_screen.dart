@@ -65,7 +65,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   int _getDaysFromPeriod(String period) {
     switch (period) {
       case '1D':
-        return 3;
+        return 1;
       case '1W':
         return 7;
       case '1M':
@@ -198,7 +198,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                         const Text('现货黄金'),
                         Text(
                           _priceHistory.isNotEmpty
-                              ? '${_selectedSource == 'jinshi' ? '¥' : '\$'}${(_priceHistory.first['gold_price'] ?? 0).toStringAsFixed(2)}'
+                              ? '${_selectedSource == 'jinshi' ? '¥' : '\$'}${(_priceHistory.last['gold_price'] ?? 0).toStringAsFixed(2)}'
                               : '--',
                           style: TextStyle(
                             fontSize: 24,
@@ -379,13 +379,14 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     final range = maxPrice - minPrice;
-    if (range == 0 || spots.length < 2) {
-      return LineChartData(lineBarsData: [
-        LineChartBarData(spots: spots, isCurved: true, barWidth: 2, color: AppTheme.primaryColor)
-      ]);
+    // ????????????Y????????
+    if (spots.length < 2) {
+      minPrice = minPrice - 10;
+      maxPrice = maxPrice + 10;
+    } else {
+      minPrice -= range * 0.1;
+      maxPrice += range * 0.1;
     }
-    minPrice -= range * 0.1;
-    maxPrice += range * 0.1;
 
     return LineChartData(
       gridData: FlGridData(
@@ -758,9 +759,9 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
   double _getPriceChange() {
     if (_priceHistory.length < 2) return 0;
-    final first = (_priceHistory.first['gold_price'] ?? 0).toDouble();
-    final last = (_priceHistory.last['gold_price'] ?? 0).toDouble();
-    return first - last;
+    final oldest = (_priceHistory.first["gold_price"] ?? 0).toDouble();
+    final newest = (_priceHistory.last["gold_price"] ?? 0).toDouble();
+    return newest - oldest;
   }
 
   Color _getPriceChangeColor() {
