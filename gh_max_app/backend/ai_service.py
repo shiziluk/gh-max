@@ -72,11 +72,10 @@ class AIService:
         """检查AI服务是否可用"""
         return self.enabled and self.api_key is not None and len(self.api_key) > 0
     
-    def _call_qwen_api(self, prompt: str, system_prompt: str = None) -> Optional[str]:
-        """调用千问API"""
+    def _call_qwen_api(self, prompt: str, system_prompt: str = None):
+        """调用千问API，返回 (success: bool, content: str|None, error: str|None)"""
         if not self.is_available():
-            logging_service.warning("AI服务不可用，请检查API Key配置", "ai")
-            return None
+            return (False, None, "AI服务未启用或API Key未配置")
         
         headers = {
             "Authorization": "Bearer " + (self.api_key.strip() if self.api_key else ""),
@@ -99,31 +98,58 @@ class AIService:
                 self.QWEN_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=60
+                timeout=60,
+                verify=True
             )
             
             if response.status_code == 200:
                 result = response.json()
-                choices = result.get('choices', [])
+                choices = result.get("choices", [])
                 if choices:
-                    message = choices[0].get('message', {})
-                    content = message.get('content', '')
-                    logging_service.info(f"千问API调用成功", "ai")
-                    return content
+                    message = choices[0].get("message", {})
+                    content = message.get("content", "")
+                    logging_service.info("千问API调用成功", "ai")
+                    return (True, content, None)
                 else:
-                    logging_service.error(f"千问API返回格式异常: {result}", "ai")
-                    return None
+                    err = f"千问API返回格式异常：{str(result)[:200]}"
+                    logging_service.error(err, "ai")
+                    return (False, None, err)
+            elif response.status_code == 401:
+                err = "API Key无效，请检查后重新输入"
+                logging_service.error(err, "ai")
+                return (False, None, err)
+            elif response.status_code == 400:
+                err_msg = ""
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("message", "") or response.text[:200]
+                except:
+                    err_msg = response.text[:200]
+                err = f"请求参数错误：模型[{self.model}]可能不存在或无权访问。详情：{err_msg}"
+                logging_service.error(err, "ai")
+                return (False, None, err)
             else:
-                logging_service.error(f"千问API调用失败: status={response.status_code}, body={response.text}", "ai")
-                return None
+                err = f"千问API返回错误：状态码{response.status_code}，{response.text[:200]}"
+                logging_service.error(err, "ai")
+                return (False, None, err)
                 
         except requests.exceptions.Timeout:
-            logging_service.error("千问API调用超时", "ai")
-            return None
+            err = "连接千问API超时，请检查网络或稍后重试"
+            logging_service.error(err, "ai")
+            return (False, None, err)
+        except requests.exceptions.SSLError as e:
+            err = f"SSL证书验证失败：{str(e)[:200]}。可能是网络环境存在证书检查。"
+            logging_service.error(err, "ai")
+            return (False, None, err)
+        except requests.exceptions.ConnectionError as e:
+            err = f"无法连接到千问API服务器：{str(e)[:200]}"
+            logging_service.error(err, "ai")
+            return (False, None, err)
         except Exception as e:
-            logging_service.error(f"千问API调用异常: {e}", "ai")
-            return None
-    
+            err = f"API调用异常：{str(e)[:300]}"
+            logging_service.error(err, "ai")
+            return (False, None, err)
+
     def analyze_market(self, market_data: Dict, technical_data: Dict, score_data: Dict) -> Optional[Dict]:
         """分析市场数据，生成AI解读"""
         if not self.is_available():
@@ -169,19 +195,19 @@ class AIService:
 
 请给出市场分析和操作建议。"""
         
-        analysis_text = self._call_qwen_api(prompt, system_prompt)
+        success, content, error = self._call_qwen_api(prompt, system_prompt)
         
-        if analysis_text:
+        if success:
             return {
                 "success": True,
-                "analysis": analysis_text,
+                "analysis": content,
                 "timestamp": str(market_data.get('timestamp', '')),
                 "model": self.model
             }
         else:
             return {
                 "success": False,
-                "error": "AI分析失败，请检查API配置",
+                "error": error or "AI分析失败，请检查API配置",
                 "timestamp": str(market_data.get('timestamp', ''))
             }
     
@@ -256,18 +282,18 @@ class AIService:
         else:
             prompt = user_question
         
-        response_text = self._call_qwen_api(prompt, system_prompt)
+        success, content, error = self._call_qwen_api(prompt, system_prompt)
         
-        if response_text:
+        if success:
             return {
                 "success": True,
-                "response": response_text,
+                "response": content,
                 "model": self.model
             }
         else:
             return {
                 "success": False,
-                "error": "AI回复失败，请稍后重试"
+                "error": error or "AI回复失败，请稍后重试"
             }
 
     def get_status(self) -> Dict:
