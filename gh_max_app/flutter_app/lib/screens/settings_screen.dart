@@ -103,6 +103,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     // 保存AI配置
+    if (_aiApiKeyController.text.isNotEmpty) {
+      setState(() => _aiEnabled = true);
+    }
     await ApiService.saveAIConfig(
       apiKey: _aiApiKeyController.text,
       enabled: _aiEnabled,
@@ -257,13 +260,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   hintText: '请输入您的千问API密钥',
                                   helperText: '在阿里云或达摩院平台获取API Key',
                                 ),
-                                enabled: _aiEnabled,
                                 onSubmitted: (value) => _saveSettings(),
                               ),
                             ),
                             const SizedBox(width: 12),
                             ElevatedButton(
-                              onPressed: _aiEnabled ? _saveSettings : null,
+                              onPressed: _saveSettings,
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 20,
@@ -275,13 +277,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.cpu, color: Colors.orange),
-                        title: const Text('AI模型选择'),
-                        subtitle: Text('当前: $_aiModel'),
-                        trailing: const Icon(Icons.chevron_right),
-                        enabled: _aiEnabled,
-                        onTap: () => _showModelPicker(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: DropdownButtonFormField<String>(
+                          value: _aiModels.contains(_aiModel) ? _aiModel : _aiModels[1],
+                          decoration: const InputDecoration(
+                            labelText: 'AI模型选择',
+                            border: OutlineInputBorder(),
+                            helperText: '选择通义千问模型版本',
+                            prefixIcon: Icon(Icons.cpu, color: Colors.orange),
+                          ),
+                          items: _aiModels.map((model) {
+                            return DropdownMenuItem<String>(
+                              value: model,
+                              child: Text(model),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _aiModel = value);
+                              _saveSettings();
+                            }
+                          },
+                        ),
                       ),
                       const ListTile(
                         leading: Icon(Icons.info_outline, color: Colors.blue),
