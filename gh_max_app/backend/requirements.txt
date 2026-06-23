@@ -1,0 +1,12 @@
+# GH-Max backend dependencies
+akshare>=1.12.0
+flask>=3.0.0
+flask-cors>=4.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+APScheduler>=3.10.0
+plyer>=2.1.0
+schedule>=1.2.0

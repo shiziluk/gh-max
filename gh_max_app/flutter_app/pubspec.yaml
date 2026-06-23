@@ -1,0 +1,42 @@
+name: gh_max_app
+description: 现货黄金全域多维AI智能研判系统
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI组件
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  
+  # 图表
+  fl_chart: ^0.66.0
+  
+  # 网络
+  http: ^1.1.0
+  
+  # 本地存储
+  shared_preferences: ^2.2.2
+  
+  # 工具
+  intl: ^0.18.1
+  provider: ^6.0.5
+  
+  # 动画
+  flutter_animate: ^4.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
